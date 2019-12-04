@@ -1,0 +1,101 @@
+#Extra credit number 1 - predict the 1 - 5 star rating from the words!
+
+#Import stuff
+
+#from __future__ import print_function, division
+#from future.utils import iteritems
+#from builtins import range
+
+import numpy as np
+from sklearn.utils import shuffle
+
+from bs4 import BeautifulSoup
+
+#Iniatialize & load
+# data courtesy of http://www.cs.jhu.edu/~mdredze/datasets/sentiment/index2.html
+all_reviews = BeautifulSoup(open('electronics/combo.review').read())
+np.random.shuffle(all_reviews)
+
+review_text = all_reviews.findAll('review_text')
+ratings = all_reviews.findAll('rating')
+
+import nltk
+from nltk.stem import WordNetLemmatizer
+
+wordnet_lemmatizer = WordNetLemmatizer()
+stopwords = set(w.rstrip() for w in open('stopwords.txt'))
+
+def my_tokenizer(s):
+    s = s.lower() # downcase
+    tokens = nltk.tokenize.word_tokenize(s) # split string into words (tokens)
+    tokens = [t for t in tokens if len(t) > 2] # remove short words, they're probably not useful
+    tokens = [wordnet_lemmatizer.lemmatize(t) for t in tokens] # put words into base form
+    tokens = [t for t in tokens if t not in stopwords] # remove stopwords
+    return tokens
+
+# create a word-to-index map so that we can create our word-frequency vectors later
+# let's also save the tokenized versions so we don't have to tokenize again later
+word_index_map = {}
+current_index = 0
+tokenized = []
+orig_reviews = []
+
+for review in review_text:
+    orig_reviews.append(review.text)
+    tokens = my_tokenizer(review.text)
+    tokenized.append(tokens)
+    for token in tokens:
+        if token not in word_index_map:
+            word_index_map[token] = current_index
+            current_index += 1
+
+print("len(word_index_map):", len(word_index_map))
+print(len(tokenized))
+
+# now let's create our input matrices with the rating added
+def tokens_to_vector(tokens, rating):
+    x = np.zeros(len(word_index_map) + 1) # last element for the rating
+    for t in tokens:
+        i = word_index_map[t]
+        x[i] += 1
+    x = x / x.sum() # normalize it before setting label
+    x[-1] = rating.text
+    return x
+
+N = len(tokenized)
+# (N x D+1 matrix - keeping them together for now so we can shuffle more easily later
+data = np.zeros((N, len(word_index_map) + 1))
+i = 0
+for tokens in tokenized:
+    xy = tokens_to_vector(tokens, ratings[i])
+    data[i,:] = xy
+    i += 1
+     
+#extra credit number 1 - predict the star rating from the words!
+
+from sklearn.linear_model import LinearRegression
+
+X = data[:,:-1]
+Y = data[:,-1]
+
+# last 100 rows will be test
+Xtrain = X[:-100,]
+Ytrain = Y[:-100,]
+Xtest = X[-100:,]
+Ytest = Y[-100:,]
+
+model = LinearRegression()
+model.fit(Xtrain, Ytrain)
+print("Train accuracy:", model.score(Xtrain, Ytrain))
+print("Test accuracy:", model.score(Xtest, Ytest))
+
+#Model scoring & checks
+
+i = 1500
+y = model.predict(X)
+print("")
+print("Predicted rating for record",i,":",y[i])
+print("Actual rating for record",i,":",Y[i])
+
+print(orig_reviews[i])
+print(tokenized[i])
